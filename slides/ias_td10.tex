@@ -1,0 +1,628 @@
+\documentclass{beamer}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{amsmath,amssymb}
+\usepackage{bm}
+\usepackage{listings}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  keywordstyle=\bfseries,
+  commentstyle=\itshape,
+  showstringspaces=false
+}
+
+\title[Naïve Bayes pour chiffres binarisés]{IAS - TP 10 - Classifieur Bayesien naïf pour MNIST binarisé}
+\subtitle{cf Poly de cours: \href{https://gitlab.inria.fr/flandes/ias/-/tree/master/CM8+9-ModelesBayesiens?ref_type=heads}{Modèles bayésiens}}
+\author{}
+\date{}
+
+\begin{document}
+
+\begin{frame}
+  \titlepage
+\end{frame}
+
+%------------------------------------------------
+\begin{frame}[fragile]{Contexte du problème}
+
+  \begin{itemize}
+    \item Données : images de chiffres (0--9) dont les pixels ont été \textbf{binarisés} (0 = éteint, 1 = allumé).
+    \item Chaque image est représentée par un vecteur
+      \[
+        X_i \in \{0,1\}^D, \quad i = 1,\dots,N,
+      \]
+      où $D$ est le nombre de pixels.
+    \item Les étiquettes associées sont
+      \[
+        y_i \in \{0,\dots,K-1\}, \quad i = 1,\dots,N.
+      \]
+    \item Objectif : apprendre un \textbf{modèle Bayesien naïf} de type Bernoulli par classe pour classer de nouvelles images.
+  \end{itemize}
+
+\end{frame}
+
+%------------------------------------------------
+\begin{frame}[fragile]{Implem: fonction \texttt{BayesienNaif\_fit}}
+
+  \begin{lstlisting}[language=Python]
+def BayesienNaif_fit(X_train, y_train):
+    ...
+  \end{lstlisting}
+
+  \vspace{0.5em}
+
+  \begin{itemize}
+    \item \texttt{X\_train} : matrice de taille $(N,D)$.
+      \begin{itemize}
+        \item $N$ : nombre d'images d'apprentissage.
+        \item $D$ : nombre de pixels par image.
+      \end{itemize}
+    \item \texttt{y\_train} : vecteur de taille $(N,)$ contenant les étiquettes de classe pour chaque image.
+    \item La fonction doit \textbf{apprendre les paramètres} du modèle naïf Bayes et les retourner.
+  \end{itemize}
+
+\end{frame}
+
+
+%------------------------------------------------
+\begin{frame}[fragile]{Récupération des dimensions}
+
+  \begin{lstlisting}[language=Python]
+N = X_train.shape[0]   # nombre d'images
+D = X_train.shape[1]   # nombre de pixels
+  \end{lstlisting}
+
+
+  \begin{itemize}
+    \item $N$ : nombre d'exemples d'apprentissage.
+    \item $D$ : dimension des vecteurs d'entrée (nombre de pixels).
+  \end{itemize}
+
+\end{frame}
+
+%------------------------------------------------
+\begin{frame}[fragile]{Nombre de classes $K$}
+
+  \begin{lstlisting}[language=Python]
+K = (y_train.max() - y_train.min() + 1)  
+  \end{lstlisting}
+
+  \begin{itemize}
+    \item On suppose que les labels sont des entiers consécutifs :
+      \[
+        y_i \in \{0, 1, \dots, K-1\}.
+      \]
+    \item Alors :
+      \[
+        K = \max(y_{\text{train}}) - \min(y_{\text{train}}) + 1.
+      \]
+    \item Mais: cette méthode est fragile si les classes ne sont pas contiguës (par exemple $\{1,3,7\}$).
+    \item Plus robuste :
+      \begin{itemize}
+        \item \texttt{classes = np.unique(y\_train)}
+        \item \texttt{K = len(classes)}
+        \item éventuellement réindexer les classes en $0,\dots,K-1$.
+      \end{itemize}
+  \end{itemize}
+
+\end{frame}
+
+%------------------------------------------------
+\begin{frame}[fragile]{Modèle probabiliste naïf Bayes (1)}
+
+  On modélise :
+  \begin{itemize}
+    \item $Y \in \{0,\dots,K-1\}$ : classe du chiffre.
+    \item $X = (X_1,\dots,X_D)$, avec $X_d \in \{0,1\}$ : valeur binaire du pixel $d$.
+  \end{itemize}
+
+  Hypothèses du modèle :
+  \begin{enumerate}
+    \item \textbf{Prior de classe} / \textbf{Proba a priori} :
+      \[
+        P(Y = k) = P_k, \quad k = 0,\dots,K-1.
+      \]
+    \item \textbf{Modèle Bernoulli par pixel, conditionnellement à la classe} :
+      \[
+        P(X_d = 1 \mid Y = k) = p_{k,d},\quad d = 1,\dots,D.
+      \]
+      la proba que le pixel $x_d$ soit "allumé" sachant que l'image appartien à la classe $k$.
+  \end{enumerate}
+
+\end{frame}
+
+%------------------------------------------------
+\begin{frame}[fragile]{Modèle probabiliste naïf Bayes (2)}
+
+  Pourquoi modèle "naïf"? car hypothèse d'indépendance conditionnelle entre les différentes dimensions de l'entrée:
+  ici on suppose que les pixels s'allument indépendamment des uns des autres.
+  Mathématiquement: 
+  \[
+    P(x \mid Y = k)
+      = \prod_{d=1}^D P(X_d = x_d \mid Y = k).
+  \]
+
+  Pour des pixels binaires (modèle de Bernoulli) :
+  \[
+    P(X_d = x_d \mid Y = k)
+      = p_{k,d}^{\,x_d} (1 - p_{k,d})^{1 - x_d}.
+  \]
+
+\end{frame}
+
+%------------------------------------------------
+\begin{frame}{Apprentissage}
+    \emph{Quel est l'objectif de l'apprentissage ?}
+    \pause
+  On veut :
+  \begin{itemize}
+    \item Estimer les $P_k = P(Y = k)$.
+    \item Estimer les $p_{k,d} = P(X_d = 1 \mid Y = k)$.
+  \end{itemize}
+
+\end{frame}
+
+%------------------------------------------------
+\begin{frame}[fragile]{Initialisation des paramètres}
+
+  \begin{lstlisting}[language=Python]
+p_kd = np.zeros((K, D))  # P(X_d=1 | Y=k)
+P_k  = np.zeros(K)       # P(Y=k)
+  \end{lstlisting}
+
+  \begin{itemize}
+    \item \texttt{p\_kd} : matrice de taille $(K,D)$.
+      \begin{itemize}
+        \item Ligne $k$ : paramètres pour la classe $k$.
+        \item Colonne $d$ : probabilité $p_{k,d}$ que le pixel $d$ soit allumé conditionnellement à $Y=k$.
+      \end{itemize}
+    \item \texttt{P\_k} : vecteur de taille $(K,)$.
+      \begin{itemize}
+        \item \texttt{P\_k[k]} estime $P(Y = k)$ (prior de classe).
+      \end{itemize}
+  \end{itemize}
+
+\end{frame}
+
+%------------------------------------------------
+\begin{frame}[fragile]{Boucle sur les classes : structure générale}
+
+  \begin{lstlisting}[language=Python]
+for k in range(K):
+    p_kd[k] = np.mean(X_train[y_train == k], axis=0)
+    P_k[k]  = np.mean(y_train == k)
+  \end{lstlisting}
+
+  \begin{itemize}
+    \item On parcourt toutes les classes $k = 0,\dots,K-1$.
+    \item Pour chaque $k$ :
+      \begin{itemize}
+        \item On sélectionne les lignes de \texttt{X\_train} correspondant à la classe $k$ via le masque \texttt{y\_train == k}.
+        \item On estime :
+          \begin{itemize}
+            \item les probabilités conditionnelles par pixel (ligne de \texttt{p\_kd}),
+            \item la probabilité a priori de la classe (entrée de \texttt{P\_k}).
+          \end{itemize}
+      \end{itemize}
+      Rappel: on fait l'hypothèse d'indépendance conditionnelleentre les pixels,
+      et que le fait que le pixel $x_d$ soit allumé ou non pour une image de classe $k$
+      suit une loi de Bernouilli de paramètre $p_{k,d}$. 
+  \end{itemize}
+
+\end{frame}
+
+%------------------------------------------------
+\begin{frame}{Estimation de $p_{k,d} = P(X_d = 1 \mid Y = k)$}
+
+  Implémentation en une ligne avec numpy:
+  \[
+    \texttt{p\_kd[k]} = \texttt{np.mean(X\_train[y\_train == k], axis=0)}.
+  \]
+
+  \begin{itemize}
+    \item \texttt{y\_train == k} : masque booléen sélectionnant les exemples de classe $k$.
+    \item \texttt{X\_train[y\_train == k]} : sous-matrice de taille $(N_k,D)$, avec $N_k$ le nombre d'exemples de classe $k$.
+    \item \texttt{np.mean(..., axis=0)} : moyenne colonne par colonne.
+  \end{itemize}
+
+  \vspace{0.5em}
+
+  Pour un pixel $d$ :
+  \[
+    \hat p_{k,d}
+      = \frac{1}{N_k} \sum_{i : y_i = k} X_{i,d},
+  \]
+  qui est la \textbf{proportion d'images de classe $k$ où le pixel $d$ vaut 1}, donc l'estimateur de maximum de vraisemblance de $P(X_d = 1 \mid Y = k)$.
+
+\end{frame}
+
+%------------------------------------------------
+\begin{frame}{Estimation des priors $P(Y = k)$}
+
+  Implémentation en une ligne avec numpy :
+  \[
+    \texttt{P\_k[k]} = \texttt{np.mean(y\_train == k)}.
+  \]
+
+  \begin{itemize}
+    \item \texttt{y\_train == k} : vecteur de 0/1 de taille $N$.
+    \item ici on calcule la moyenne suivante :
+      \[
+        \hat P_k
+          = \frac{1}{N} \sum_{i=1}^N \mathbf{1}_{\{y_i = k\}}
+      \]
+      c'est la \textbf{proportion d'exemples} de classe $k$ dans la base d'apprentissage.
+    \item C'est l'estimateur de maximum de vraisemblance de $P(Y = k)$.
+  \end{itemize}
+
+\end{frame}
+
+%------------------------------------------------
+\begin{frame}[fragile]{Sortie de la fonction}
+
+  \begin{lstlisting}[language=Python]
+return p_kd, P_k
+  \end{lstlisting}
+
+  \begin{itemize}
+    \item La fonction renvoie :
+      \begin{itemize}
+        \item \texttt{p\_kd} : matrice $(K,D)$ des probabilités conditionnelles des pixels
+          \[
+            \hat p_{k,d} \approx P(X_d = 1 \mid Y = k).
+          \]
+        \item \texttt{P\_k} : vecteur $(K,)$ des probabilités a priori de classe
+          \[
+            \hat P_k \approx P(Y = k).
+          \]
+      \end{itemize}
+    \item Ce sont les paramètres du modèle Bayesien naïf Bernoulli appris par maximum de vraisemblance.
+  \end{itemize}
+
+\end{frame}
+
+%------------------------------------------------
+\begin{frame}{Rappel : MLE pour une loi de Bernoulli (1)}
+
+On considère des variables aléatoires
+\[
+X_1,\dots,X_n \overset{\text{i.i.d.}}{\sim} \text{Bernoulli}(p),
+\quad X_i \in \{0,1\}, \quad p \in (0,1).
+\]
+
+On observe un échantillon $x_1,\dots,x_n$ et on note
+\[
+S_n = \sum_{i=1}^n x_i.
+\]
+
+\medskip
+
+\textbf{Vraisemblance} (souvent notée $L$ pour \textit{likelihood}):
+\[
+L(p; x_1,\dots,x_n)
+= \prod_{i=1}^n p^{x_i}(1-p)^{1-x_i}
+= p^{S_n}(1-p)^{n-S_n}.
+\]
+
+\medskip
+
+On cherche l’estimateur du maximum de vraisemblance :
+\[
+\hat p_{\text{MV}}
+= \arg\max_{p\in(0,1)} L(p; x_1,\dots,x_n).
+\]
+
+\end{frame}
+
+%------------------------------------------------
+\begin{frame}{Rappel : MLE pour une loi de Bernoulli (2)}
+
+On considère la \textbf{log-vraisemblance} :
+\[
+\ell(p) = \log L(p; x_1,\dots,x_n)
+= S_n \log p + (n-S_n)\log(1-p).
+\]
+
+\medskip
+
+\textbf{Dérivée} pour $p\in(0,1)$ :
+\[
+\ell'(p)
+= \frac{S_n}{p} - \frac{n-S_n}{1-p}.
+\]
+
+Condition de stationnarité $\ell'(p) = 0$ :
+\[
+\frac{S_n}{p} = \frac{n-S_n}{1-p}
+\ \Longrightarrow\
+S_n(1-p) = (n-S_n)p
+\ \Longrightarrow\
+S_n = np.
+\]
+\end{frame}
+
+%------------------------------------------------
+\begin{frame}{Rappel : MLE pour une loi de Bernoulli (3)}
+
+Donc un extremum de la fonction est
+\[
+\hat p_{\text{MV}} = \frac{S_n}{n}
+= \frac{1}{n}\sum_{i=1}^n x_i.
+\]
+On retrouve la moyenne empirique !
+
+\emph{Mais: Est-ce un minum ou un maximum ?} \pause
+\medskip
+
+\textbf{Deuxième dérivée} :
+\[
+\ell''(p) = -\frac{S_n}{p^2} - \frac{n-S_n}{(1-p)^2} < 0,
+\]
+donc $\ell$ est concave et $\hat p_{\text{MV}}$ est bien un maximum global.
+
+\end{frame}
+
+%------------------------------------------------
+\begin{frame}{Retour au pb: Règle de classification naïve Bayes}
+
+Pour une image $x \in \{0,1\}^D$ et une classe $k$,
+\[
+P(x \mid Y=k)
+= \prod_{d=1}^D p_{k,d}^{x_d} (1-p_{k,d})^{1-x_d}.
+\]
+
+En logarithme :
+\[
+\log P(x \mid Y=k)
+= \sum_{d=1}^D \bigl( x_d \log p_{k,d}
++ (1-x_d)\log(1-p_{k,d}) \bigr).
+\]
+
+\end{frame}
+
+%------------------------------------------------
+\begin{frame}{Retour au pb: Règle de classification naïve Bayes}
+
+  Pour une nouvelle image $x = (x_1,\dots,x_D) \in \{0,1\}^D$, la règle de décision (en log) est :
+  \[
+    \hat y(x)
+      = \arg\max_{k} \left[
+        \log \hat P_k
+        + \sum_{d=1}^D
+          \big(
+            x_d \log \hat p_{k,d}
+            + (1 - x_d)\log(1 - \hat p_{k,d})
+          \big)
+      \right].
+  \]
+
+  \vspace{0.5em}
+
+  Rappel: on peut l'écrire ainsi grâce à l'hypothèse d'indépendance entre les pixels $x_d$.
+
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}{Rappel : règle de classification de Bayes (1)}
+
+\textbf{Règle de Bayes (forme générale).}
+
+On cherche à prédire la classe
+\[
+  \hat y(x) = \arg\max_{k} P(Y = k \mid X = x).
+\]
+
+Par la formule de Bayes :
+\[
+  P(Y = k \mid X = x)
+  = \frac{P(Y = k)\,P(X = x \mid Y = k)}{P(X = x)}.
+\]
+
+Comme $P(X = x)$ ne dépend pas de $k$ :
+\[
+  \hat y(x)
+  = \arg\max_{k} P(Y = k)\,P(X = x \mid Y = k).
+\]
+
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}{Rappel : règle de classification de Bayes (2) }
+
+\textbf{Hypothèse d'indépendance conditionnelle (naïve Bayes).}
+
+On suppose que les composantes de $X = (X_1,\dots,X_D)$ sont
+indépendantes conditionnellement à la classe $Y = k$ :
+\[
+  P(X = x \mid Y = k)
+  = \prod_{d=1}^D P(X_d = x_d \mid Y = k).
+\]
+
+Pour un modèle Bernoulli avec paramètres estimés
+$\hat p_{k,d} \approx P(X_d = 1 \mid Y = k)$, et en prenant le logarithme,
+on obtient la règle de décision suivante :
+\[
+  \hat y(x)
+    = \arg\max_{k} \left[
+      \log \hat P_k
+      + \sum_{d=1}^D
+        \big(
+          x_d \log \hat p_{k,d}
+          + (1 - x_d)\log(1 - \hat p_{k,d})
+        \big)
+    \right].
+\]
+
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}[fragile]{Implem: \texttt{BayesienNaif\_predict}}
+
+On applique la formule précédente, avec:
+
+\begin{itemize}
+  \item \texttt{X} : matrice des nouvelles images à classer, de taille $(N,D)$.
+  \item \texttt{p\_kd} et \texttt{P\_k} : paramètres appris par \texttt{BayesienNaif\_fit}.
+  \item \texttt{vecteur\_de\_probas[k, i]} : score (log-probabilité) de la classe $k$ pour l'image $i$.
+\end{itemize}
+
+NB: EPS: pour éviter de calculer $log(0)$.
+\end{frame}
+
+
+\begin{frame}[fragile]{Implem: \texttt{BayesienNaif\_predict}}
+
+\textbf{Décision finale :}
+\[
+\texttt{k\_best} = \arg\max_{k} \texttt{vecteur\_de\_probas[k, i]}
+\]
+pour chaque image $i$.
+
+\begin{itemize}
+  \item On choisit la classe $k$ qui maximise
+    \[
+      \log P(Y=k) + \log P(x_i \mid Y=k),
+    \]
+    c'est la règle de Bayes en version log.
+  \item \texttt{k\_best} contient donc les \textbf{labels prédits} pour toutes les images de \texttt{X}.
+\end{itemize}
+
+\end{frame}
+
+\begin{frame}{Bonus}
+    Autre modélisation: avec une loi Gaussienne 
+
+    Que dire de la matrice de covariance ?
+\end{frame}
+
+%======================================= gaussien 
+
+%------------------------------------------------
+\begin{frame}{Modèlisation}
+
+\textbf{Données et variables.}
+
+\begin{itemize}
+  \item On représente chaque image par un vecteur
+    \[
+      X \in \mathbb{R}^D
+    \]
+    où $D$ est le nombre de pixels (niveaux de gris, réels).
+  \item La classe (chiffre) associée est
+    \[
+      Y \in \{0,\dots,K-1\}.
+    \]
+\end{itemize}
+
+Plus besoin de binariser les images !
+
+\end{frame}
+
+%------------------------------------------------
+\begin{frame}{Modèle bayésien gaussien pour la classification d'images (1)}
+
+
+\textbf{Modèle génératif par classe.}
+
+\begin{itemize}
+  \item Prior de classe :
+    \[
+      \mathbb{P}(Y = k) = \pi_k,
+      \quad k = 0,\dots,K-1,
+      \quad \sum_{k=0}^{K-1} \pi_k = 1,\ \pi_k > 0.
+    \]
+  \item Modèle gaussien multivarié pour les pixels conditionnellement à la classe :
+    \[
+      X \mid (Y = k) \sim \mathcal{N}(\mu_k, \Sigma_k),
+    \]
+    avec $\mu_k \in \mathbb{R}^D$ et $\Sigma_k \in \mathbb{R}^{D \times D}$.
+\end{itemize}
+
+\end{frame}
+
+%------------------------------------------------
+\begin{frame}{Modèle bayésien gaussien pour la classification d'images (2)}
+
+\textbf{Densité conditionnelle gaussienne.}
+
+Pour chaque classe $k$, on suppose :
+\[
+p(x \mid Y = k)
+= \frac{1}{(2\pi)^{D/2}\sqrt{\det \Sigma_k}}
+  \exp\!\left(
+    -\frac{1}{2}(x-\mu_k)^{\top}\Sigma_k^{-1}(x-\mu_k)
+  \right).
+\]
+
+\medskip
+
+On dispose d'un échantillon d'apprentissage
+\[
+(x_i, y_i)_{i=1}^N,
+\quad x_i \in \mathbb{R}^D,\ y_i \in \{0,\dots,K-1\}.
+\]
+\end{frame}
+
+%------------------------------------------------
+\begin{frame}{Modèle bayésien gaussien pour la classification d'images (3)}
+
+\textbf{Objectif de l'apprentissage : combien de params à estimer ?} \pause
+\begin{itemize}
+  \item estimer les priors de classe $\pi_k$,
+  \item estimer les moyennes $\mu_k$,
+  \item estimer les matrices de covariance pleines $\Sigma_k$.
+\end{itemize}
+
+\medskip
+NB: intérêt d'une PCA au préalable
+
+\end{frame}
+
+%------------------------------------------------
+\begin{frame}{Loi Gaussienne, cas "naïf"}
+
+\textbf{Cas "naïf" (indépendance conditionnelle) :}
+\begin{itemize}
+  \item On impose souvent une covariance diagonale :
+    \[
+      \Sigma_k = \mathrm{diag}(\sigma_{k,1}^2,\dots,\sigma_{k,D}^2).
+    \]
+  \item Les pixels sont alors supposés \emph{indépendants} conditionnellement à la classe :
+    \[
+      \mathrm{Cov}(X_d, X_{d'} \mid Y=k) = 0
+      \quad \text{pour } d \neq d'.
+    \]
+\end{itemize}
+
+\end{frame}
+
+%------------------------------------------------
+\begin{frame}{Signification d'une matrice de covariance pleine}
+
+\textbf{Avec une covariance pleine :}
+\begin{itemize}
+  \item On autorise des covariances non nulles entre pixels :
+    \[
+      \mathrm{Cov}(X_d, X_{d'} \mid Y=k) \neq 0.
+    \]
+  \item Le modèle peut capturer des structures plus riches (corrélations entre parties de l'image).
+  \item Le nombre de paramètres par classe est plus élevé :
+    \[
+      \frac{D(D+1)}{2} \quad \text{paramètres dans } \Sigma_k.
+    \]
+\end{itemize}
+
+\medskip
+
+On gagne en flexibilité (modèle plus expressif), mais on augmente le risque de sur-apprentissage si le nombre d'exemples par classe $N_k$ n'est pas suffisant.
+
+\end{frame}
+
+
+\end{document}
